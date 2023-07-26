@@ -6,7 +6,7 @@ int main() {
     using namespace std::chrono_literals;
 
     auto& client = gazellemq::client::getPublisherClient();
-    client.connectToHub("localhost", 5875);
+    client.connectToHub("ExamplePublisher", "localhost", 5875);
 
     std::latch latch(1);
 

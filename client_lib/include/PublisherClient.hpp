@@ -20,6 +20,7 @@ namespace gazellemq::client {
             ClientStep_EPollSetup,
             ClientStep_SendingMessage,
             ClientStep_SendingIntent,
+            ClientStep_SendingName,
             ClientStep_Reconnect,
         };
 
@@ -48,6 +49,7 @@ namespace gazellemq::client {
 
         std::string nextBatch;
         std::string writeBuffer;
+        size_t nbNameBytesSent{};
 
         std::mutex mQueue;
         std::condition_variable cvQueue;
@@ -57,6 +59,7 @@ namespace gazellemq::client {
         int const messageBatchSize;
         rigtorp::MPMCQueue<std::string> queue;
         std::vector<int> raisedMessageTypeIds;
+        std::string clientName;
 
 
     public:
@@ -89,7 +92,9 @@ namespace gazellemq::client {
          * @param host - Host of your gazelle server
          * @param port - Port of your gazelle server
          */
-        void connectToHub(char const* host, int const port = 3822) {
+        void connectToHub(char const* name, char const* host, int const port = 3822) {
+            clientName.append(name);
+
             if (!wasConnectToHubCalled) {
                 wasConnectToHubCalled = true;
                 init();
@@ -314,8 +319,38 @@ namespace gazellemq::client {
          */
         bool onSendIntentComplete(int res) {
             if (res == NB_INTENT_CHARS) {
+                writeBuffer.clear();
+                writeBuffer.append(clientName);
+                writeBuffer.append("\r");
+                beginSendName();
                 return true;
             }
+            return false;
+        }
+
+        /**
+         * Sends the name to the hub
+         */
+        void beginSendName() {
+            io_uring_sqe* sqe = io_uring_get_sqe(&ring);
+            io_uring_prep_send(sqe, fd, writeBuffer.c_str(), writeBuffer.size(), 0);
+
+            step = ClientStep_SendingName;
+            io_uring_submit(&ring);
+        }
+
+        /**
+         * Checks if we are done sending the name bytes
+         * @param res
+         * @return
+         */
+        bool onSendNameComplete(int res) {
+            writeBuffer.erase(0, res);
+            if (!writeBuffer.empty()) {
+                beginSendName();
+                return true;
+            }
+
             return false;
         }
 
@@ -479,6 +514,13 @@ namespace gazellemq::client {
                                     }
                                 case ClientStep_SendingIntent:
                                     if (onSendIntentComplete(res)) {
+                                        break;
+                                    } else {
+                                        io_uring_cqe_seen(&ring, cqe);
+                                        goto outer;
+                                    }
+                                case ClientStep_SendingName:
+                                    if (onSendNameComplete(res)) {
                                         break;
                                     } else {
                                         io_uring_cqe_seen(&ring, cqe);
