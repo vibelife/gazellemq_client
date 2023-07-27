@@ -12,7 +12,7 @@ int main() {
 
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 
-    //client.publish(888, R"({"email":"andre_newman2@hotmail.com","password":"28077485"})");
+    client.publish("888", R"({"email":"andre_newman2@hotmail.com","password":"28077485"})");
     // client.publish(888, R"({"email":"paul@akanewmedia.com","password":"metallica"})");
 
     // for (int i{}; i < 1; ++i) {

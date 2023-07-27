@@ -102,6 +102,24 @@ namespace gazellemq::client {
             }
         }
 
+        /**
+         * Publishes a message to the hub. Subscribers of [messageType] will receive the message.
+         * @param messageType - The message type. Subscribers must subscribe to this exact string to handle the message.
+         * @param messageContent - The message contents.
+         */
+        void publish(std::string&& messageType, std::string&& messageContent) {
+            std::string msg;
+            msg.reserve(messageType.size() + messageContent.size() + 16);
+            msg.append(messageType);
+            msg.push_back('|');
+            msg.append(std::to_string(messageContent.size()));
+            msg.push_back('|');
+            msg.append(messageContent);
+
+            queue.push(std::move(msg));
+
+            notify();
+        }
     private:
         /**
          * Initialization code here
