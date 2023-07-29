@@ -1,5 +1,5 @@
-#ifndef GAZELLE_CLIENT_PUBLISHERCLIENT2_HPP
-#define GAZELLE_CLIENT_PUBLISHERCLIENT2_HPP
+#ifndef GAZELLEMQ_CLIENT_SUBSCRIBERCLIENT_HPP
+#define GAZELLEMQ_CLIENT_SUBSCRIBERCLIENT_HPP
 
 #include <netdb.h>
 #include <liburing.h>
@@ -9,10 +9,11 @@
 #include <netinet/tcp.h>
 #include <cstring>
 #include <sys/epoll.h>
+#include <functional>
 #include "MPMCQueue/MPMCQueue.hpp"
 
 namespace gazellemq::client {
-    class PublisherClient {
+    class SubscriberClient {
     private:
         enum ClientStep {
             ClientStep_NotSet,
@@ -21,17 +22,49 @@ namespace gazellemq::client {
             ClientStep_SendingMessage,
             ClientStep_SendingIntent,
             ClientStep_SendingName,
+            ClientStep_SendingSubscriptions,
+            ClientStep_Ack,
+            ClientStep_ReceiveData,
             ClientStep_Reconnect,
         };
 
+        enum ParseState {
+            ParseState_messageType,
+            ParseState_messageContentLength,
+            ParseState_messageContent,
+        };
+
+        static constexpr auto CHAR_LEN = sizeof(char);
         static constexpr auto BROKEN_PIPE = -32;
         static constexpr auto TIMEOUT = -62;
         static constexpr auto MAX_READ_BUF = 8;
         static constexpr auto NB_INTENT_CHARS = 2;
         static constexpr addrinfo hints{0, AF_INET, SOCK_STREAM, 0, 0, nullptr, nullptr, nullptr};
-        constexpr static auto PUBLISHER_INTENT = "P\r";
+        constexpr static auto SUBSCRIBER_INTENT = "S\r";
+
+
+        class MessageHandler {
+        public:
+            std::function<void(std::string&&)> const callback;
+            std::string messageTypeId;
+
+            static MessageHandler create(std::string&& messageTypeId, std::function<void(std::string&&)>&& callback) {
+                MessageHandler m{std::move(callback), std::move(messageTypeId)};
+
+                return std::move(m);
+            }
+        };
+
+        struct Message {
+            std::string msgType;
+            std::string message;
+        };
+
 
         struct gaicb* gai{};
+
+
+        ParseState parseState{ParseState_messageType};
 
         ClientStep step{ClientStep_NotSet};
 
@@ -51,31 +84,49 @@ namespace gazellemq::client {
         std::string writeBuffer;
         size_t nbNameBytesSent{};
 
-        std::mutex mQueue;
-        std::condition_variable cvQueue;
-        std::atomic_flag hasPendingData{false};
         std::atomic_flag isRunning{true};
 
-        int const messageBatchSize;
         rigtorp::MPMCQueue<std::string> queue;
-        std::vector<int> raisedMessageTypeIds;
         std::string clientName;
+
+        std::string csvSubscriptions;
+
+        char readBuffer[MAX_READ_BUF]{};
+        std::string message;
+        char ackBuffer[1]{};
+
+        std::string messageType;
+        std::string messageContent;
+        std::string messageLengthBuffer;
+        size_t messageContentLength{};
+
+        size_t nbMessageBytesRead{};
+        size_t nbContentBytesRead{};
+
+        rigtorp::MPMCQueue<Message> messages;
+        std::vector<MessageHandler> handlers;
+        std::vector<std::jthread> handlerThreads;
+        int const nbMessageHandlerThreads;
+
+        std::condition_variable cvMessageQueue;
+        std::mutex mMessageQueue;
+        std::atomic_flag hasMessages{false};
 
 
     public:
-        explicit PublisherClient(
+        explicit SubscriberClient(
+                int const messagesQueueSize = 128,
+                int const maxEventBatch = 16,
+                int const nbMessageHandlerThreads = 2,
                 int const queueDepth = 65536,
-                int const eventQueueDepth = 8192,
-                int const maxEventBatch = 32,
-                int const msgBatchSize = 1
+                int const eventQueueDepth = 8192
         ) noexcept:
+                messages(std::max(messagesQueueSize, 1)),
+                maxEventBatch(std::max(maxEventBatch, 1)),
+                nbMessageHandlerThreads(std::max(nbMessageHandlerThreads, 1)),
                 queue(queueDepth),
-                eventQueueDepth(eventQueueDepth),
-                maxEventBatch(maxEventBatch),
-                messageBatchSize(std::max(msgBatchSize, 1))
-        {
-            writeBuffer.reserve(256);
-        }
+                eventQueueDepth(eventQueueDepth)
+        {}
 
     public:
         /**
@@ -103,22 +154,20 @@ namespace gazellemq::client {
         }
 
         /**
-         * Publishes a message to the hub. Subscribers of [messageType] will receive the message.
-         * @param messageType - The message type. Subscribers must subscribe to this exact string to handle the message.
-         * @param messageContent - The message contents.
+         * Subscribes to a single message type.
+         * @param messageTypeId - The message type ID
+         * @param callback - Callback when an event is published that has the passed in [messageTypeId]
          */
-        void publish(std::string&& messageType, std::string&& messageContent) {
-            std::string msg;
-            msg.reserve(messageType.size() + messageContent.size() + 16);
-            msg.append(messageType);
-            msg.push_back('|');
-            msg.append(std::to_string(messageContent.size()));
-            msg.push_back('|');
-            msg.append(messageContent);
+        SubscriberClient& subscribe(std::string&& messageTypeId, std::function<void(std::string&&)>&& callback) {
+            if (!csvSubscriptions.empty()) {
+                csvSubscriptions.append(",");
+            }
 
-            queue.push(std::move(msg));
+            csvSubscriptions.append(messageTypeId);
 
-            notify();
+            handlers.emplace_back(MessageHandler::create(std::move(messageTypeId), std::move(callback)));
+
+            return *this;
         }
     private:
         /**
@@ -127,6 +176,7 @@ namespace gazellemq::client {
         void init() {
             signal(SIGINT, sigintHandler);
             io_uring_queue_init(eventQueueDepth, &ring, 0);
+            monitorMessageQueue();
         }
 
         /**
@@ -151,17 +201,6 @@ namespace gazellemq::client {
             }
             v.clear();
             gai = nullptr;
-        }
-
-        /**
-         * Alerts the thread that there is pending data
-         */
-        void notify() {
-            if (!hasPendingData.test()) {
-                std::lock_guard lock{mQueue};
-                hasPendingData.test_and_set();
-                cvQueue.notify_one();
-            }
         }
 
         /**
@@ -276,11 +315,11 @@ namespace gazellemq::client {
          * Sets up epoll
          * @param res
          */
-        bool beginEPollSetup(int res) {
+        void beginEPollSetup(int res) {
             if (res < 0) {
                 printError("Could not connect to server");
-                // return beginWriteToBacklog();
-                return false;
+                // Cant continue in this state
+                exit(0);
             } else {
                 printf("Connected to the hub\n");
                 isConnected = true;
@@ -288,7 +327,7 @@ namespace gazellemq::client {
                 epfd = epoll_create1(0);
                 if (epfd < 0) {
                     printError(strerror(-epfd));
-                    return false;
+                    exit(0);
                 }
 
                 io_uring_sqe* sqe = io_uring_get_sqe(&ring);
@@ -299,8 +338,6 @@ namespace gazellemq::client {
 
                 step = ClientStep_EPollSetup;
                 io_uring_submit(&ring);
-
-                return true;
             }
         }
 
@@ -308,15 +345,16 @@ namespace gazellemq::client {
          * Epoll has been set up. Next we send the intent.
          * @param res
          */
-        bool onEPollSetupComplete(int res) {
+        void onEPollSetupComplete(int res) {
             if (res == 0) {
                 writeBuffer.clear();
-                writeBuffer.append(PUBLISHER_INTENT);
+                writeBuffer.append(SUBSCRIBER_INTENT);
 
                 beginSendIntent();
-                return true;
             } else {
-                return false;
+                printError("epoll setup failed\n");
+                // Cant continue in this state
+                exit(0);
             }
         }
 
@@ -335,15 +373,16 @@ namespace gazellemq::client {
          * At this point we are done communicating with the hub. Now messages can be published.
          * @param res
          */
-        bool onSendIntentComplete(int res) {
-            if (res == NB_INTENT_CHARS) {
+        void onSendIntentComplete(int res) {
+            writeBuffer.erase(0, res);
+            if (writeBuffer.empty()) {
                 writeBuffer.clear();
                 writeBuffer.append(clientName);
                 writeBuffer.append("\r");
                 beginSendName();
-                return true;
+            } else {
+                beginSendIntent();
             }
-            return false;
         }
 
         /**
@@ -362,80 +401,173 @@ namespace gazellemq::client {
          * @param res
          * @return
          */
-        bool onSendNameComplete(int res) {
+        void onSendNameComplete(int res) {
             writeBuffer.erase(0, res);
             if (!writeBuffer.empty()) {
                 beginSendName();
-                return true;
             }
 
-            return false;
+            beginReceiveAck();
         }
 
         /**
-         * Sends data to the hub.
+         * Receives acknowledgment from the server
          */
-        void beginSendData() {
+        void beginReceiveAck() {
             io_uring_sqe* sqe = io_uring_get_sqe(&ring);
-            io_uring_prep_send(sqe, fd, writeBuffer.c_str(), writeBuffer.size(), 0);
+            io_uring_prep_recv(sqe, fd, ackBuffer, 1, 0);
 
-            step = ClientStep_SendingMessage;
+            step = ClientStep_Ack;
+            io_uring_submit(&ring);
+        }
+
+        void onReceiveAckComplete(int res) {
+            csvSubscriptions.append("\r");
+            beginSendSubscriptions();
+        }
+
+        /**
+         * Sends the subscriptions to the hub
+         */
+        void beginSendSubscriptions() {
+            io_uring_sqe* sqe = io_uring_get_sqe(&ring);
+            io_uring_prep_send(sqe, fd, csvSubscriptions.c_str(), csvSubscriptions.size(), 0);
+
+            step = ClientStep_SendingSubscriptions;
+            io_uring_submit(&ring);
+        }
+
+        void onSendSubscriptionsComplete(int res) {
+            csvSubscriptions.erase(0, res);
+            if (!csvSubscriptions.empty()) {
+                beginSendSubscriptions();
+            } else {
+                beginReceiveData();
+            }
+        }
+
+        /**
+         * Receives data from the hub
+         */
+        void beginReceiveData() {
+            io_uring_sqe* sqe = io_uring_get_sqe(&ring);
+            io_uring_prep_recv(sqe, fd, readBuffer, MAX_READ_BUF, 0);
+
+            step = ClientStep_ReceiveData;
             io_uring_submit(&ring);
         }
 
         /**
-         * Checks if more bytes need to be sent. Returns true if there is more sending to be done, false otherwise.
+         * Checks if we are done receiving data
          * @param res
          */
-        bool onDataSent(int res) {
-            if (res < 1) {
-                if (res < 0) {
-                    printError("Could not write data", res);
-                }
-                return false;
-            } else {
-                writeBuffer.erase(0, res);
-                if (writeBuffer.empty()) {
-                    {
-                        std::lock_guard lockGuard{mQueue};
-                        if (queue.empty()) {
-                            hasPendingData.clear();
-                        }
-                    }
+        void onReceiveDataComplete(int res) {
+            nbMessageBytesRead = 0;
 
-                    return false;
-                } else {
-                    // still need to send some bytes
-                    beginSendData();
+            if (parseState == ParseState_messageContent) {
+                readRestOfBuffer(0, res);
+            } else {
+                for (size_t i{0}; i < res; ++i) {
+                    char ch {readBuffer[i]};
+                    ++nbMessageBytesRead;
+                    if (parseState == ParseState_messageType) {
+                        if (ch == '|') {
+                            parseState = ParseState_messageContentLength;
+                            continue;
+                        } else {
+                            messageType.push_back(ch);
+                        }
+                    } else if (parseState == ParseState_messageContentLength) {
+                        if (ch == '|') {
+                            messageContentLength = std::stoul(messageLengthBuffer);
+                            parseState = ParseState_messageContent;
+                            continue;
+                        } else {
+                            messageLengthBuffer.push_back(ch);
+                        }
+                    } else {
+                        readRestOfBuffer(i, res - nbMessageBytesRead + 1);
+                        break;
+                    }
                 }
             }
-            return true;
+
+            // receive more data
+            beginReceiveData();
         }
 
         /**
-         * Drains the queue of messages and sends them. Returns true if it was sent, false if the queue is empty.
-         * @return
+         * Reads the rest of readBuffer
+         * @param startPos
+         * @param nbChars
+         * @return returns true if parsing is done
          */
-        bool drainQueue() {
-            std::string tmp;
-            nextBatch.clear();
+        bool readRestOfBuffer(size_t startPos, size_t nbChars) {
+            messageContent.append(&readBuffer[startPos], nbChars);
 
-            int i{0};
-            while ((i != messageBatchSize) && queue.try_pop(tmp)) {
-                nextBatch.append(tmp);
-                ++i;
-            }
+            nbContentBytesRead += nbChars;
+            if ((nbContentBytesRead) == messageContentLength) {
 
-            writeBuffer.append(nextBatch);
+                messages.push(Message{std::move(messageType), std::move(messageContent)});
+                notify();
 
-            if (!writeBuffer.empty()) {
-                beginSendData();
+                messageContentLength = 0;
+                nbMessageBytesRead = 0;
+                nbContentBytesRead = 0;
+                messageContent.clear();
+                messageLengthBuffer.clear();
+                messageType.clear();
+                parseState = ParseState_messageType;
+
                 return true;
             }
 
-
             return false;
         }
+
+        /**
+         * Alerts the thread that there is pending data
+         */
+        void notify() {
+            if (!hasMessages.test()) {
+                std::lock_guard lock{mMessageQueue};
+                hasMessages.test_and_set();
+                cvMessageQueue.notify_one();
+            }
+        }
+
+        /**
+         * Monitors the message queue and handles them when they come in
+         */
+        void monitorMessageQueue() {
+            for (int i{}; i < nbMessageHandlerThreads; ++i) {
+                handlerThreads.emplace_back([this]() {
+                    while (isRunning.test()) {
+                        std::unique_lock uLock{mMessageQueue};
+                        cvMessageQueue.wait(uLock, [this]() { return hasMessages.test(); });
+                        uLock.unlock();
+
+                        Message m;
+                        if (messages.try_pop(m)) {
+                            for (size_t i{}; i < handlers.size(); ++i) {
+                                auto& handler = handlers.at(i);
+                                if (handler.messageTypeId == m.msgType) {
+                                    handler.callback(std::move(m.message));
+                                }
+                            }
+                        }
+
+                        {
+                            std::lock_guard lockGuard{mMessageQueue};
+                            if (messages.empty()) {
+                                hasMessages.clear();
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
 
         /**
          * Tries to connect to the hub
@@ -465,99 +597,63 @@ namespace gazellemq::client {
 
             __kernel_timespec ts{.tv_sec = 2, .tv_nsec = 0};
 
-            outer:
             while (isRunning.test()) {
-                if (step != ClientStep_NotSet && step != ClientStep_ConnectToHub) {
-                    std::unique_lock uniqueLock{mQueue};
-                    bool didTimeout{!cvQueue.wait_for(uniqueLock, 2s, [this]() { return hasPendingData.test(); })};
-
-                    uniqueLock.unlock();
-
-                    if (didTimeout) {
-                        // Check if we need to reconnect to the hub
-                        if (fd == 0) {
-                            connect();
-                        } else {
-                            goto outer;
-                        }
-                    } else if (!drainQueue()) {
-                        goto outer;
-                    }
-
+                int ret = io_uring_wait_cqe_timeout(&ring, cqes.data(), &ts);
+                if (ret == -SIGILL) {
+                    continue;
                 }
 
-                while (isRunning.test()) {
-                    int ret = io_uring_wait_cqe_timeout(&ring, cqes.data(), &ts);
-                    if (ret == -SIGILL) {
-                        continue;
-                    }
-
-                    if (ret < 0) {
-                        if (ret == TIMEOUT) {
-                            if (!isConnected) {
-                                beginReconnectToServer();
-                            }
-                        } else {
-                            printError("io_uring_wait_cqe_nr(...)", ret);
-                            return;
-                        }
-                    }
-
+                if (ret < 0) {
                     if (ret == TIMEOUT) {
-                        continue;
+                        if (!isConnected) {
+                            beginReconnectToServer();
+                        }
+                    } else {
+                        printError("io_uring_wait_cqe_nr(...)", ret);
+                        return;
                     }
+                }
 
-                    for (auto& cqe: cqes) {
-                        if (cqe != nullptr) {
-                            int res = cqe->res;
-                            if (res == -EAGAIN) {
-                                io_uring_cqe_seen(&ring, cqe);
-                                continue;
-                            }
+                if (ret == TIMEOUT) {
+                    continue;
+                }
 
-                            switch (step) {
-                                case ClientStep_ConnectToHub:
-                                    if (beginEPollSetup(res)) {
-                                        break;
-                                    } else {
-                                        io_uring_cqe_seen(&ring, cqe);
-                                        goto outer;
-                                    }
-                                case ClientStep_EPollSetup:
-                                    if (onEPollSetupComplete(res)) {
-                                        break;
-                                    } else {
-                                        io_uring_cqe_seen(&ring, cqe);
-                                        goto outer;
-                                    }
-                                case ClientStep_SendingIntent:
-                                    if (onSendIntentComplete(res)) {
-                                        break;
-                                    } else {
-                                        io_uring_cqe_seen(&ring, cqe);
-                                        goto outer;
-                                    }
-                                case ClientStep_SendingName:
-                                    if (onSendNameComplete(res)) {
-                                        break;
-                                    } else {
-                                        io_uring_cqe_seen(&ring, cqe);
-                                        goto outer;
-                                    }
-                                case ClientStep_SendingMessage:
-                                    if (onDataSent(res)) {
-                                        break;
-                                    } else {
-                                        io_uring_cqe_seen(&ring, cqe);
-                                        goto outer;
-                                    }
-                                default:
-                                    break;
-                            }
+                for (auto &cqe: cqes) {
+                    if (cqe != nullptr) {
+                        int res = cqe->res;
+                        if (res == -EAGAIN) {
+                            io_uring_cqe_seen(&ring, cqe);
+                            continue;
                         }
 
-                        io_uring_cqe_seen(&ring, cqe);
+                        switch (step) {
+                            case ClientStep_ConnectToHub:
+                                beginEPollSetup(res);
+                                break;
+                            case ClientStep_EPollSetup:
+                                onEPollSetupComplete(res);
+                                break;
+                            case ClientStep_SendingIntent:
+                                onSendIntentComplete(res);
+                                break;
+                            case ClientStep_SendingName:
+                                onSendNameComplete(res);
+                                break;
+                            case ClientStep_Ack:
+                                onReceiveAckComplete(res);
+                                break;
+                            case ClientStep_SendingSubscriptions:
+                                onSendSubscriptionsComplete(res);
+                                break;
+                            case ClientStep_ReceiveData:
+                                onReceiveDataComplete(res);
+                                break;
+                            default:
+                                break;
+                        }
                     }
+
+                    io_uring_cqe_seen(&ring, cqe);
                 }
             }
 
@@ -568,11 +664,11 @@ namespace gazellemq::client {
     };
 
 
-    inline PublisherClient _clientPublisher{};
+    inline SubscriberClient _clientSubscriber{};
 
-    static PublisherClient& getPublisherClient() {
-        return gazellemq::client::_clientPublisher;
+    static SubscriberClient& getSubscriberClient() {
+        return gazellemq::client::_clientSubscriber;
     }
 }
 
-#endif //GAZELLE_CLIENT_PUBLISHERCLIENT2_HPP
+#endif //GAZELLEMQ_CLIENT_SUBSCRIBERCLIENT_HPP
