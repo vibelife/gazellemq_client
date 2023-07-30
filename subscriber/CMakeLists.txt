@@ -3,7 +3,7 @@ project(gazellemq_client_subscriber)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(${PROJECT_NAME} main.cpp ../client_lib/include/SubscriberClient.hpp)
+add_executable(${PROJECT_NAME} main.cpp ../client_lib/include/SubscriberClient.hpp main.cpp)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules (JEMALLOC jemalloc)
