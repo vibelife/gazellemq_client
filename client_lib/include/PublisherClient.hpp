@@ -394,6 +394,7 @@ namespace gazellemq::client {
                 }
                 return false;
             } else {
+                // printf("writeBuffer: %s\n", writeBuffer.c_str());
                 writeBuffer.erase(0, res);
                 if (writeBuffer.empty()) {
                     {

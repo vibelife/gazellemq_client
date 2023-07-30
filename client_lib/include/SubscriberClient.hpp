@@ -96,8 +96,8 @@ namespace gazellemq::client {
         char ackBuffer[1]{};
 
         std::string messageType;
-        std::string messageContent;
         std::string messageLengthBuffer;
+        std::string messageContent;
         size_t messageContentLength{};
 
         size_t nbMessageBytesRead{};
@@ -462,38 +462,48 @@ namespace gazellemq::client {
          * @param res
          */
         void onReceiveDataComplete(int res) {
-            nbMessageBytesRead = 0;
+            parseMessage(readBuffer, res);
+            // receive more data
+            beginReceiveData();
+        }
 
-            if (parseState == ParseState_messageContent) {
-                readRestOfBuffer(0, res);
-            } else {
-                for (size_t i{0}; i < res; ++i) {
-                    char ch {readBuffer[i]};
-                    ++nbMessageBytesRead;
-                    if (parseState == ParseState_messageType) {
-                        if (ch == '|') {
-                            parseState = ParseState_messageContentLength;
-                            continue;
-                        } else {
-                            messageType.push_back(ch);
-                        }
-                    } else if (parseState == ParseState_messageContentLength) {
-                        if (ch == '|') {
-                            messageContentLength = std::stoul(messageLengthBuffer);
-                            parseState = ParseState_messageContent;
-                            continue;
-                        } else {
-                            messageLengthBuffer.push_back(ch);
-                        }
+
+        void parseMessage(char const* buffer, size_t bufferLength) {
+            for (size_t i{0}; i < bufferLength; ++i) {
+                char ch{buffer[i]};
+                if (parseState == ParseState_messageType) {
+                    if (ch == '|') {
+                        parseState = ParseState_messageContentLength;
+                        continue;
                     } else {
-                        readRestOfBuffer(i, res - nbMessageBytesRead + 1);
-                        break;
+                        messageType.push_back(ch);
+                    }
+                } else if (parseState == ParseState_messageContentLength) {
+                    if (ch == '|') {
+                        messageContentLength = std::stoul(messageLengthBuffer);
+                        parseState = ParseState_messageContent;
+                        continue;
+                    } else {
+                        messageLengthBuffer.push_back(ch);
+                    }
+                } else if (parseState == ParseState_messageContent) {
+                    messageContent.push_back(ch);
+                    ++nbContentBytesRead;
+
+                    if (messageContentLength == nbContentBytesRead) {
+                        // Done parsing
+                        messages.push(Message{std::move(messageType), std::move(messageContent)});
+                        notify();
+
+                        messageContentLength = 0;
+                        nbContentBytesRead = 0;
+                        messageContent.clear();
+                        messageLengthBuffer.clear();
+                        messageType.clear();
+                        parseState = ParseState_messageType;
                     }
                 }
             }
-
-            // receive more data
-            beginReceiveData();
         }
 
         /**
