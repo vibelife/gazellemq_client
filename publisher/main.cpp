@@ -15,12 +15,16 @@ int main() {
     // client.publish("test1", R"({"email":"andre_newman2@hotmail.com","password":"28077485"})");
     // client.publish(888, R"({"email":"paul@akanewmedia.com","password":"metallica"})");
 
-    for (int i{}; i < 2; ++i) {
+    auto t = std::chrono::high_resolution_clock::now().time_since_epoch();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t);
+    printf("Current time: %zu\n", ms.count());
+
+    for (int i{}; i < 500000; ++i) {
         client.publish("test1", R"({"email":"andre_newman2@hotmail.com","password":"28077485"})");
     }
 
     double elapsed = std::chrono::duration<double>{std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - t1)}.count();
-    printf("Elapsed time: %fms\n", elapsed);
+    printf("Elapsed time: %fs\n", elapsed);
 
     latch.wait();
     return 0;

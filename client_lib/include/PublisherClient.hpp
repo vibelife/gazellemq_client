@@ -64,7 +64,7 @@ namespace gazellemq::client {
 
     public:
         explicit PublisherClient(
-                int const queueDepth = 65536,
+                int const queueDepth = 500000,
                 int const eventQueueDepth = 8192,
                 int const maxEventBatch = 32,
                 int const msgBatchSize = 1

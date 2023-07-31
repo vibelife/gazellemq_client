@@ -37,7 +37,7 @@ namespace gazellemq::client {
         static constexpr auto CHAR_LEN = sizeof(char);
         static constexpr auto BROKEN_PIPE = -32;
         static constexpr auto TIMEOUT = -62;
-        static constexpr auto MAX_READ_BUF = 8;
+        static constexpr auto MAX_READ_BUF = 256;
         static constexpr auto NB_INTENT_CHARS = 2;
         static constexpr addrinfo hints{0, AF_INET, SOCK_STREAM, 0, 0, nullptr, nullptr, nullptr};
         constexpr static auto SUBSCRIBER_INTENT = "S\r";
@@ -115,10 +115,10 @@ namespace gazellemq::client {
 
     public:
         explicit SubscriberClient(
-                int const messagesQueueSize = 128,
-                int const maxEventBatch = 16,
+                int const messagesQueueSize = 500000,
+                int const maxEventBatch = 32,
                 int const nbMessageHandlerThreads = 2,
-                int const queueDepth = 65536,
+                int const queueDepth = 8192,
                 int const eventQueueDepth = 8192
         ) noexcept:
                 messages(std::max(messagesQueueSize, 1)),
