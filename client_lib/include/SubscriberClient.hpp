@@ -117,7 +117,7 @@ namespace gazellemq::client {
         explicit SubscriberClient(
                 int const messagesQueueSize = 500000,
                 int const maxEventBatch = 32,
-                int const nbMessageHandlerThreads = 2,
+                int const nbMessageHandlerThreads = 8,
                 int const queueDepth = 8192,
                 int const eventQueueDepth = 8192
         ) noexcept:
