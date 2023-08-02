@@ -19,7 +19,7 @@ int main() {
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t);
     printf("Current time: %zu\n", ms.count());
 
-    for (int i{}; i < 500000; ++i) {
+    for (int i{}; i < 1; ++i) {
         client.publish("test1", R"({"email":"andre_newman2@hotmail.com","password":"28077485"})");
     }
 

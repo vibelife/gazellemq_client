@@ -487,8 +487,18 @@ namespace gazellemq::client {
                         messageLengthBuffer.push_back(ch);
                     }
                 } else if (parseState == ParseState_messageContent) {
-                    messageContent.push_back(ch);
-                    ++nbContentBytesRead;
+                    size_t nbCharsNeeded {messageContentLength - nbContentBytesRead};
+                    // add as many characters as possible in bulk
+
+                    if ((i + nbCharsNeeded) <= bufferLength) {
+                        messageContent.append(&buffer[i], nbCharsNeeded);
+                    } else {
+                        nbCharsNeeded = bufferLength - i;
+                        messageContent.append(&buffer[i], nbCharsNeeded);
+                    }
+
+                    i += nbCharsNeeded - 1;
+                    nbContentBytesRead += nbCharsNeeded;
 
                     if (messageContentLength == nbContentBytesRead) {
                         // Done parsing
@@ -504,35 +514,6 @@ namespace gazellemq::client {
                     }
                 }
             }
-        }
-
-        /**
-         * Reads the rest of readBuffer
-         * @param startPos
-         * @param nbChars
-         * @return returns true if parsing is done
-         */
-        bool readRestOfBuffer(size_t startPos, size_t nbChars) {
-            messageContent.append(&readBuffer[startPos], nbChars);
-
-            nbContentBytesRead += nbChars;
-            if ((nbContentBytesRead) == messageContentLength) {
-
-                messages.push(Message{std::move(messageType), std::move(messageContent)});
-                notify();
-
-                messageContentLength = 0;
-                nbMessageBytesRead = 0;
-                nbContentBytesRead = 0;
-                messageContent.clear();
-                messageLengthBuffer.clear();
-                messageType.clear();
-                parseState = ParseState_messageType;
-
-                return true;
-            }
-
-            return false;
         }
 
         /**
