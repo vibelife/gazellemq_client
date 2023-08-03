@@ -25,6 +25,7 @@ namespace gazellemq::client {
             ClientStep_SendingSubscriptions,
             ClientStep_Ack,
             ClientStep_ReceiveData,
+            ClientStep_Disconnect,
             ClientStep_Reconnect,
         };
 
@@ -317,9 +318,9 @@ namespace gazellemq::client {
          */
         void beginEPollSetup(int res) {
             if (res < 0) {
-                printError("Could not connect to server");
+                printError("Could not connect to server, retrying...");
                 // Cant continue in this state
-                exit(0);
+                // exit(0);
             } else {
                 printf("Connected to the hub\n");
                 isConnected = true;
@@ -462,11 +463,31 @@ namespace gazellemq::client {
          * @param res
          */
         void onReceiveDataComplete(int res) {
-            parseMessage(readBuffer, res);
-            // receive more data
-            beginReceiveData();
+            if (res == 0) {
+                // disconnected
+                beginDisconnect();
+            } else {
+                parseMessage(readBuffer, res);
+                // receive more data
+                beginReceiveData();
+            }
         }
 
+        /**
+         * Disconnects from the server
+         * @param ring
+         */
+        void beginDisconnect() {
+            io_uring_sqe* sqe = io_uring_get_sqe(&ring);
+            io_uring_prep_close(sqe, fd);
+
+            step = ClientStep_Disconnect;
+            io_uring_submit(&ring);
+        }
+
+        void onDisconnectComplete() {
+            isConnected = false;
+        }
 
         void parseMessage(char const* buffer, size_t bufferLength) {
             for (size_t i{0}; i < bufferLength; ++i) {
@@ -638,6 +659,9 @@ namespace gazellemq::client {
                                 break;
                             case ClientStep_ReceiveData:
                                 onReceiveDataComplete(res);
+                                break;
+                            case ClientStep_Disconnect:
+                                onDisconnectComplete();
                                 break;
                             default:
                                 break;
