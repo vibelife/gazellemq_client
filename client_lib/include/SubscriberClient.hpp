@@ -91,6 +91,7 @@ namespace gazellemq::client {
         std::string clientName;
 
         std::string csvSubscriptions;
+        size_t csvSubscriptionsIndex{};
 
         char readBuffer[MAX_READ_BUF]{};
         std::string message;
@@ -423,7 +424,11 @@ namespace gazellemq::client {
         }
 
         void onReceiveAckComplete(int res) {
-            csvSubscriptions.append("\r");
+            if (!csvSubscriptions.ends_with("\r")) {
+                csvSubscriptions.append("\r");
+            }
+
+            csvSubscriptionsIndex = 0;
             beginSendSubscriptions();
         }
 
@@ -432,15 +437,15 @@ namespace gazellemq::client {
          */
         void beginSendSubscriptions() {
             io_uring_sqe* sqe = io_uring_get_sqe(&ring);
-            io_uring_prep_send(sqe, fd, csvSubscriptions.c_str(), csvSubscriptions.size(), 0);
+            io_uring_prep_send(sqe, fd, &csvSubscriptions.c_str()[csvSubscriptionsIndex], csvSubscriptions.size() - csvSubscriptionsIndex, 0);
 
             step = ClientStep_SendingSubscriptions;
             io_uring_submit(&ring);
         }
 
         void onSendSubscriptionsComplete(int res) {
-            csvSubscriptions.erase(0, res);
-            if (!csvSubscriptions.empty()) {
+            csvSubscriptionsIndex += res;
+            if (csvSubscriptionsIndex < csvSubscriptions.size()) {
                 beginSendSubscriptions();
             } else {
                 beginReceiveData();
