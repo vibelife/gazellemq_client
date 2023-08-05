@@ -21,6 +21,8 @@ namespace gazellemq::client {
             ClientStep_SendingMessage,
             ClientStep_SendingIntent,
             ClientStep_SendingName,
+            ClientStep_Ack,
+            ClientStep_Ready,
             ClientStep_Reconnect,
         };
 
@@ -60,6 +62,7 @@ namespace gazellemq::client {
         rigtorp::MPMCQueue<std::string> queue;
         std::vector<int> raisedMessageTypeIds;
         std::string clientName;
+        char ackBuffer[1]{};
 
 
     public:
@@ -119,6 +122,11 @@ namespace gazellemq::client {
             queue.push(std::move(msg));
 
             notify();
+        }
+
+
+        void publish(int messageType, std::string&& messageContent) {
+            publish(std::to_string(messageType), std::move(messageContent));
         }
     private:
         /**
@@ -369,7 +377,23 @@ namespace gazellemq::client {
                 return true;
             }
 
-            return false;
+            beginReceiveAck();
+            return true;
+        }
+
+        /**
+         * Receives acknowledgment from the server
+         */
+        void beginReceiveAck() {
+            io_uring_sqe* sqe = io_uring_get_sqe(&ring);
+            io_uring_prep_recv(sqe, fd, ackBuffer, 1, 0);
+
+            step = ClientStep_Ack;
+            io_uring_submit(&ring);
+        }
+
+        void onReceiveAckComplete(int res) {
+            step = ClientStep_Ready;
         }
 
         /**
@@ -545,6 +569,10 @@ namespace gazellemq::client {
                                         io_uring_cqe_seen(&ring, cqe);
                                         goto outer;
                                     }
+                                case ClientStep_Ack:
+                                    onReceiveAckComplete(res);
+                                    io_uring_cqe_seen(&ring, cqe);
+                                    goto outer;
                                 case ClientStep_SendingMessage:
                                     if (onDataSent(res)) {
                                         break;

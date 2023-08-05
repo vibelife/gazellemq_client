@@ -27,5 +27,7 @@ int main() {
     printf("Elapsed time: %fs\n", elapsed);
 
     latch.wait();
+
+
     return 0;
 }
