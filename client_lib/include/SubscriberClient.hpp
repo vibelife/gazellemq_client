@@ -38,7 +38,7 @@ namespace gazellemq::client {
         static constexpr auto CHAR_LEN = sizeof(char);
         static constexpr auto BROKEN_PIPE = -32;
         static constexpr auto TIMEOUT = -62;
-        static constexpr auto MAX_READ_BUF = 256;
+        static constexpr auto MAX_READ_BUF = 8192;
         static constexpr auto NB_INTENT_CHARS = 2;
         static constexpr addrinfo hints{0, AF_INET, SOCK_STREAM, 0, 0, nullptr, nullptr, nullptr};
         constexpr static auto SUBSCRIBER_INTENT = "S\r";

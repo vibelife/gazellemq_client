@@ -3,7 +3,7 @@ project(gazellemq_client_publisher)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(${PROJECT_NAME} main.cpp ../client_lib/include/PublisherClient.hpp json/simdjson.hpp json/simdjson.cpp)
+add_executable(${PROJECT_NAME} main.cpp ../client_lib/include/PublisherClient.hpp)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules (JEMALLOC jemalloc)
