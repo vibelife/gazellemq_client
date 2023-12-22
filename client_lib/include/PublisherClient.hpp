@@ -58,7 +58,7 @@ namespace gazellemq::client {
         std::atomic_flag hasPendingData{false};
         std::atomic_flag isRunning{true};
 
-        int const messageBatchSize;
+        unsigned int messageBatchSize;
         rigtorp::MPMCQueue<std::string> queue;
         std::vector<int> raisedMessageTypeIds;
         std::string clientName;
@@ -124,9 +124,20 @@ namespace gazellemq::client {
             notify();
         }
 
-
         void publish(int messageType, std::string&& messageContent) {
             publish(std::to_string(messageType), std::move(messageContent));
+        }
+
+        /**
+         * @brief Sets the message batch size. This can significantly increase performance.
+         * Messages will be batched up to the messageBatchSize, then sent out.
+         * If there aren't enough messages to fill the batch when the message queue is being drained,
+         * then whatever is available will be sent, so if you set the batch size to 5,
+         * but only publish 3 messages, then 3 will be sent.
+         * @param size - The new message batch size.
+         */
+        void setMessageBatchSize(int const size) {
+            this->messageBatchSize = size;
         }
     private:
         /**
@@ -597,7 +608,7 @@ namespace gazellemq::client {
     };
 
 
-    inline PublisherClient _clientPublisher{};
+    inline PublisherClient _clientPublisher{500000, 8192, 32, 1};
 
     static PublisherClient& getPublisherClient() {
         return gazellemq::client::_clientPublisher;

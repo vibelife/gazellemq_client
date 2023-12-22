@@ -20,7 +20,7 @@ int main() {
     printf("Current time: %zu\n", ms.count());
 
     for (int i{}; i < 1; ++i) {
-        client.publish("test1", R"({"email":"diane@akanewmedia.com","password":"password123"})");
+        client.publish("test1", R"([{"email":"d@akanewmedia.com","pa":"password"},{"email":"p@akanewmedia.com","password":"metallica"}])");
     }
 
     double elapsed = std::chrono::duration<double>{std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - t1)}.count();

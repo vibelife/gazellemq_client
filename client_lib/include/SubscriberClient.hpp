@@ -684,7 +684,13 @@ namespace gazellemq::client {
     };
 
 
-    inline SubscriberClient _clientSubscriber{};
+    inline SubscriberClient _clientSubscriber{
+        500000,
+        32,
+        8,
+        8192,
+        8192
+    };
 
     static SubscriberClient& getSubscriberClient() {
         return gazellemq::client::_clientSubscriber;
