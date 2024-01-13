@@ -608,7 +608,7 @@ namespace gazellemq::client {
     };
 
 
-    inline PublisherClient _clientPublisher{500000, 8192, 32, 1};
+    inline PublisherClient _clientPublisher{500000, 8192, 32, 10};
 
     static PublisherClient& getPublisherClient() {
         return gazellemq::client::_clientPublisher;
