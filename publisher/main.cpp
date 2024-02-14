@@ -10,24 +10,23 @@ int main() {
 
     std::latch latch(1);
 
-    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-
-    // client.publish("test1", R"({"email":"diane@akanewmedia.com","password":"password123"})");
-    // client.publish(888, R"({"email":"paul@akanewmedia.com","password":"metallica"})");
-
-    auto t = std::chrono::high_resolution_clock::now().time_since_epoch();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t);
-    printf("Current time: %zu\n", ms.count());
-
-    for (int i{}; i < 1; ++i) {
-        client.publish("test1", R"([{"email":"d@akanewmedia.com","pa":"password"},{"email":"p@akanewmedia.com","password":"metallica"}])");
-    }
-
-    double elapsed = std::chrono::duration<double>{std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - t1)}.count();
-    printf("Elapsed time: %fs\n", elapsed);
+    client.setOnReady([&latch] {
+        auto t = std::chrono::high_resolution_clock::now().time_since_epoch();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t);
+        printf("Current time: %zu\n", ms.count());
+        latch.count_down();
+    });
 
     latch.wait();
 
+    std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+    for (int i{}; i < 1; ++i) {
+        client.publish("test1", R"({"email":"giannis.antetokounmpo@milwaukeebucks.com","password":"password123"})");
+    }
+    double elapsed = std::chrono::duration<double>{std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - t1)}.count();
+    printf("Elapsed time: %fs\n", elapsed);
+
+    std::latch{1}.wait();
 
     return 0;
 }

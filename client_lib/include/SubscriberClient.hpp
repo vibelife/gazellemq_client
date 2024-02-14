@@ -468,7 +468,7 @@ namespace gazellemq::client {
          * @param res
          */
         void onReceiveDataComplete(int res) {
-            if (res == 0) {
+            if (res <= 0) {
                 // disconnected
                 beginDisconnect();
             } else {
@@ -684,8 +684,8 @@ namespace gazellemq::client {
     };
 
 
-    inline SubscriberClient _clientSubscriber{
-        500000,
+    static inline SubscriberClient _clientSubscriber{
+        1000000,
         32,
         8,
         8192,

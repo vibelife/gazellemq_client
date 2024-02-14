@@ -9,6 +9,7 @@
 #include <netinet/tcp.h>
 #include <cstring>
 #include <sys/epoll.h>
+#include <functional>
 #include "MPMCQueue/MPMCQueue.hpp"
 
 namespace gazellemq::client {
@@ -51,7 +52,6 @@ namespace gazellemq::client {
 
         std::string nextBatch;
         std::string writeBuffer;
-        size_t nbNameBytesSent{};
 
         std::mutex mQueue;
         std::condition_variable cvQueue;
@@ -63,7 +63,7 @@ namespace gazellemq::client {
         std::vector<int> raisedMessageTypeIds;
         std::string clientName;
         char ackBuffer[1]{};
-
+        std::function<void()> onReadyFn;
 
     public:
         explicit PublisherClient(
@@ -88,6 +88,11 @@ namespace gazellemq::client {
         static void sigintHandler(int signo) {
             printf("^C pressed. Shutting down\n");
             exit(0);
+        }
+
+        PublisherClient& setOnReady(std::function<void()>&& fn) {
+            this->onReadyFn = std::move(fn);
+            return *this;
         }
 
         /**
@@ -405,6 +410,7 @@ namespace gazellemq::client {
 
         void onReceiveAckComplete(int res) {
             step = ClientStep_Ready;
+            onReadyFn();
         }
 
         /**
@@ -429,7 +435,6 @@ namespace gazellemq::client {
                 }
                 return false;
             } else {
-                // printf("writeBuffer: %s\n", writeBuffer.c_str());
                 writeBuffer.erase(0, res);
                 if (writeBuffer.empty()) {
                     {
@@ -462,13 +467,12 @@ namespace gazellemq::client {
                 ++i;
             }
 
-            writeBuffer.append(nextBatch);
+            std::swap(writeBuffer, nextBatch);
 
             if (!writeBuffer.empty()) {
                 beginSendData();
                 return true;
             }
-
 
             return false;
         }
@@ -608,7 +612,7 @@ namespace gazellemq::client {
     };
 
 
-    inline PublisherClient _clientPublisher{500000, 8192, 32, 10};
+    inline PublisherClient _clientPublisher{1000000, 8192, 32, 10};
 
     static PublisherClient& getPublisherClient() {
         return gazellemq::client::_clientPublisher;

@@ -1,7 +1,7 @@
 High performance C++ client libraries that connect to the GazelleMQ server.
 ---
 1) Contains a publisher that pushes messages to GazelleMQ server
-2) Contains a subscriber that receices messages from GazelleMQ server
+2) Contains a subscriber that receives messages from GazelleMQ server
 3) Contains an example publisher, and an example subscriber
 
 The publisher is as simple as 

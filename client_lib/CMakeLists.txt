@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.24)
 project(client_lib)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+
 add_library(${PROJECT_NAME} include/MPMCQueue/MPMCQueue.hpp include/PublisherClient.hpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
