@@ -60,5 +60,5 @@ Results:  All messages received on the subscriber after 430ms - 489ms
 Results:  All messages received on the subscriber after 210ms - 230ms
 
 ## How to replicate these performance tests
-Clone https://github.com/vibelife/gazellemq_server compile and run the GazelleMQ server.
-Clone this repo and change NB_MESSAGES from 1 to 1000000 (or whatever number you want) in both the subscriber and publisher main.cpp files.
+1) Clone https://github.com/vibelife/gazellemq_server compile and run the GazelleMQ server.
+2) Clone this repo and change NB_MESSAGES from 1 to 1000000 (or whatever number you want) in both the subscriber and publisher main.cpp files.
