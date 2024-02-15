@@ -42,7 +42,7 @@ Common parameters for all tests
 
 ### Performance tests #1
 - No compiler optimization (GazelleMQ server also not using compiler optimization)
-- 1 Publisher is publishing 1,000,000 (86MB) messages to GazelleMQ
+- 1 Publisher is publishing 1,000,000 messages (86MB) to GazelleMQ
 - 1 Subscriber is receiving all 1,000,000 messages from GazelleMQ
 
 Results:  All messages received on the subscriber after 430ms - 489ms
