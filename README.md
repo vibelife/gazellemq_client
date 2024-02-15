@@ -33,5 +33,32 @@ int main() {
         .connectToHub("ExampleSubscriber", "localhost", 5875);
 }
 ```
+## Performance test #1
 
+- Intel Core i9-12900KF 64GB RAM
+- Ubuntu 22.04
+- No compiler optimization (GazelleMQ server also NOT using compiler optimization)
+- Message size: 86 bytes
+- GazelleMQ server batch buffer size: 32KB (messages less than 32KB are automatically batched together)
+- Publisher batch size: 10 messages (up to 10 waiting messages are batched together and published)
+- 1 Publisher is publishing 1,000,000 messages to GazelleMQ
+- 1 Subscriber is receiving all 1,000,000 messages from GazelleMQ
 
+Results:  All messages received on the subscriber after 430ms - 489ms
+
+## Performance test #2
+
+- Intel Core i9-12900KF 64GB RAM
+- Ubuntu 22.04
+- **-O3 compiler optimization** (GazelleMQ server also using -O3 compiler optimization!)
+- Message size: 86 bytes
+- GazelleMQ server batch buffer size: 32KB (messages less than 32KB are automatically batched together)
+- Publisher batch size: 10 messages (up to 10 waiting messages are batched together and published)
+- 1 Publisher is publishing 1,000,000 messages to GazelleMQ
+- 1 Subscriber is receiving all 1,000,000 messages from GazelleMQ
+
+Results:  All messages received on the subscriber after 210ms - 230ms
+
+## How to replicate these performance tests
+Clone https://github.com/vibelife/gazellemq_server compile and run the GazelleMQ server.
+Clone this repo and change NB_MESSAGES from 1 to 1000000 (or whatever number you want) in both the subscriber and publisher main.cpp files.

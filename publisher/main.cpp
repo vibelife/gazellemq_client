@@ -4,9 +4,10 @@
 
 int main() {
     using namespace std::chrono_literals;
+    static constexpr auto NB_MESSAGES = 1;
 
     auto& client = gazellemq::client::getPublisherClient();
-    client.connectToHub("ExamplePublisher", "localhost", 5875);
+    client.connectToHub("ExamplePublisher", "192.168.1.177", 5875);
 
     std::latch latch(1);
 
@@ -20,7 +21,7 @@ int main() {
     latch.wait();
 
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-    for (int i{}; i < 1; ++i) {
+    for (int i{}; i < NB_MESSAGES; ++i) {
         client.publish("test1", R"({"email":"giannis.antetokounmpo@milwaukeebucks.com","password":"password123"})");
     }
     double elapsed = std::chrono::duration<double>{std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - t1)}.count();
