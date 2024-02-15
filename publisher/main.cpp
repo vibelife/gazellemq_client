@@ -7,7 +7,7 @@ int main() {
     static constexpr auto NB_MESSAGES = 1;
 
     auto& client = gazellemq::client::getPublisherClient();
-    client.connectToHub("ExamplePublisher", "192.168.1.177", 5875);
+    client.connectToHub("ExamplePublisher", "localhost", 5875);
 
     std::latch latch(1);
 
