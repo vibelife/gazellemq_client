@@ -22,7 +22,7 @@ int main() {
                 count = 0;
             }
         })
-        .connectToHub(name.c_str(), "192.168.1.177", 5875);
+        .connectToHub(name.c_str(), "localhost", 5875);
 
     std::latch{1}.wait();
 }
