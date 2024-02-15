@@ -1,5 +1,6 @@
 #include <latch>
 #include <thread>
+//#include <jemalloc/jemalloc.h>
 #include "../client_lib/include/PublisherClient.hpp"
 
 int main() {
@@ -14,7 +15,7 @@ int main() {
     client.setOnReady([&latch] {
         auto t = std::chrono::high_resolution_clock::now().time_since_epoch();
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t);
-        printf("Current time: %zu\n", ms.count());
+        printf("Publishing %d messages: time=%zu\n", NB_MESSAGES, ms.count());
         latch.count_down();
     });
 
@@ -22,10 +23,10 @@ int main() {
 
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for (int i{}; i < NB_MESSAGES; ++i) {
-        client.publish("test1", R"({"email":"giannis.antetokounmpo@milwaukeebucks.com","password":"password123"})");
+        client.publish("login", R"({"email":"giannis.antetokounmpo@milwaukeebucks.com","password":"password123"})");
     }
-    double elapsed = std::chrono::duration<double>{std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - t1)}.count();
-    printf("Elapsed time: %fs\n", elapsed);
+
+    //malloc_stats_print(NULL, NULL, NULL);
 
     std::latch{1}.wait();
 

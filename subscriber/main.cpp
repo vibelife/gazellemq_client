@@ -13,12 +13,11 @@ int main() {
     name.append(vl::random::getString());
 
     gazellemq::client::getSubscriberClient()
-        .subscribe("test1", [&count](std::string&& message) {
-            ++count;
-            if (count == NB_MESSAGES) {
+        .subscribe("login", [&count](std::string&& message) {
+            if (++count == NB_MESSAGES) {
                 auto t = std::chrono::high_resolution_clock::now().time_since_epoch();
                 auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t);
-                printf("Current time: %zu\n", ms.count());
+                printf("Received all %d messages: time=%zu\n", NB_MESSAGES, ms.count());
                 count = 0;
             }
         })

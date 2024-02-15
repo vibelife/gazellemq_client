@@ -21,4 +21,10 @@ link_libraries(${URING})
 find_library(ANL anl)
 link_libraries(${ANL})
 
-target_link_libraries(${PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} ${URING} ${ANL})
+
+pkg_check_modules (JEMALLOC jemalloc)
+
+pkg_search_module(JEMALLOC REQUIRED jemalloc)
+include_directories(${JEMALLOC_INCLUDE_DIRS})
+
+target_link_libraries(${PROJECT_NAME} ${JEMALLOC_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${URING} ${ANL})
