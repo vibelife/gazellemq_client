@@ -12,4 +12,4 @@ pkg_check_modules (JEMALLOC jemalloc)
 pkg_search_module(JEMALLOC REQUIRED jemalloc)
 include_directories(${JEMALLOC_INCLUDE_DIRS})
 
-target_link_libraries(${PROJECT_NAME} ${JEMALLOC_LIBRARIES} client_lib)
+target_link_libraries(${PROJECT_NAME} ${JEMALLOC_LIBRARIES} client_lib /usr/local/lib/libtbb.so)

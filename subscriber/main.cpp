@@ -9,8 +9,8 @@ int main() {
 
     std::atomic<long> count{0};
 
-    std::string name{"ExampleSubscriber_"};
-    name.append(vl::random::getString());
+    std::string name{"ExampleSubscriber"};
+    // name.append(vl::random::getString());
 
     gazellemq::client::getSubscriberClient()
         .subscribe("login", [&count](std::string&& message) {
@@ -21,7 +21,7 @@ int main() {
                 count = 0;
             }
         })
-        .connectToHub(name.c_str(), "localhost", 5875);
+        .connectToHub(name.c_str(), "localhost", 5975);
 
     std::latch{1}.wait();
 }
