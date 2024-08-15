@@ -1,6 +1,6 @@
 #include <latch>
 #include <thread>
-//#include <jemalloc/jemalloc.h>
+// #include <jemalloc/jemalloc.h>
 #include "../client_lib/include/PublisherClient.hpp"
 #include "../common/Consts.hpp"
 
@@ -23,10 +23,10 @@ int main() {
 
     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
     for (int i{}; i < bench::consts::NB_MESSAGES; ++i) {
-        client.publish("login", R"({"email":"giannis.antetokounmpo@milwaukeebucks.com","password":"password123"})");
+        client.publish("order", R"({"peer":"EURUSD", "type": "buy"})");
     }
 
-    //malloc_stats_print(NULL, NULL, NULL);
+    // malloc_stats_print(NULL, NULL, NULL);
 
     std::latch{1}.wait();
 

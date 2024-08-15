@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 project(gazellemq_client_subscriber)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O3")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 
 add_executable(${PROJECT_NAME} main.cpp ../client_lib/include/SubscriberClient.hpp main.cpp Random.hpp ../common/Consts.hpp)
 

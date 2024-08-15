@@ -13,7 +13,7 @@ int main() {
     // name.append(vl::random::getString());
 
     gazellemq::client::getSubscriberClient()
-        .subscribe("login", [&count](std::string&& message) {
+        .subscribe("order", [&count](std::string&& message) {
             if (++count == bench::consts::NB_MESSAGES) {
                 auto t = std::chrono::high_resolution_clock::now().time_since_epoch();
                 auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t);
